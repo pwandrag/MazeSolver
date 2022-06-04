@@ -38,36 +38,97 @@ namespace MazeSolver
         static int xMax = 0;
         static int yMin = 0;
         static int yMax = 0;
+        static bool stop = false;
 
         static void Main(string[] args)
         {
             Console.WriteLine("Hello World!");
             ConvertToMatrix();
             DetectStart();
-            Console.WriteLine("Start: {0}:{1}", startX, startY);
 
-            Walk(direction.east, startX, startY);
-            Print();
-            PrintTrail();
+            var trail = Seek(direction.east, startX, startY);
+            trail.Add(new pos { x = startX, y = startY });
+
+            PrintMaze();
+            PrintTrail(trail);
+            PrintDirections(trail);
 
             Console.ReadKey();
         }
 
-        static bool IsExit(int x, int y)
+        /// <summary>
+        /// The premise of this is that when open space is detected 
+        /// it continues to search in all directions exept the direction 
+        /// it came from. Once the exit is detected it returns an empty list
+        /// that starts the unwinding of the recusive search.
+        /// If a return from a recusion is detected that is not null, it implies 
+        /// the exit was found and a backtrack occurs by adding the positions to the 
+        /// returning list in reverse order. If a wall is found the recursion stops
+        /// and a null is retuned, effectively killing that thread
+        /// 
+        /// A global stop signal is used to stop all searches once the exit is found
+        /// this prevents exhaustive searching of the maze
+        /// 
+        /// </summary>
+        /// <param name="dir">Direction last search was from</param>
+        /// <param name="x">last search pos x</param>
+        /// <param name="y">last search pos y</param>
+        /// <returns>list of positions from exit</returns>
+        static List<pos> Seek(direction dir, int x, int y)
         {
-            var exit = 
-                (matrix[y][x] == " " &&
-                (x == xMax ||
-                y == yMax));
+            if (stop) return null;
 
-            if (y == startY || x == startX)
+            direction[] directions;
+
+            //calculate next position and next directions to travel in (no backtracking)
+            switch (dir)
             {
-                exit = false;
+                case direction.east:
+                    x = x + 1;
+                    directions = new direction[] { direction.east, direction.south, direction.north };
+                    break;
+                case direction.west:
+                    x = x - 1;
+                    directions = new direction[] { direction.west, direction.south, direction.north };
+                    break;
+                case direction.north:
+                    y = y - 1;
+                    directions = new direction[] { direction.west, direction.north, direction.east };
+                    break;
+                case direction.south:
+                    y = y + 1;
+                    directions = new direction[] { direction.west, direction.east, direction.south };
+                    break;
+                default:
+                    directions = new direction[] { };
+                    break;
             }
-            return exit;
+
+            //prevent out of bounds
+            if (y > matrix[0].Length - 1 || x > matrix.Length - 1 || x < 0 || y < 0) return null;
+
+            //detect exit
+            if (DetectExit(x, y)) return new List<pos>();
+
+            //continue walking
+            if (matrix[y][x] == " ")
+            {
+                foreach (var item in directions.ToList())
+                {
+                    var t = Seek(item, x, y);
+                    if (t != null)
+                    {
+                        t.Add(new pos() { x = x, y = y });
+                        return t;
+                    }
+                }
+            }
+
+            return null;
         }
 
-        static void Print()
+
+        static void PrintMaze()
         {
             for (int i = 0; i < matrix.Length; i++)
             {
@@ -79,71 +140,44 @@ namespace MazeSolver
             }
         }
 
-        static void PrintTrail()
+        static void PrintTrail(List<pos> track)
         {
+            foreach (var item in track)
+            {
+                trail[item.y][item.x] = "*";
+            }
+
             for (int i = 0; i < trail.Length; i++)
             {
                 for (int j = 0; j < trail[i].Length; j++)
                 {
-                    Console.Write(trail[i][j]??" ");
+                    Console.Write(trail[i][j] ?? " ");
                 }
                 Console.WriteLine();
             }
         }
 
-        enum direction { east, west, north, south }
-        static bool Walk(direction dir, int x, int y)
+        static void PrintDirections(List<pos> track)
         {
-            
-            switch (dir)
+            track.Reverse();
+            pos lastPos = null;
+            var directions = "";
+            foreach (var item in track)
             {
-                case direction.east:
-                    x = x+1;
-                    break;
-                case direction.west:
-                    x = x-1;
-                    break;
-                case direction.north:
-                    y = y-1;
-                    break;
-                case direction.south:
-                    y = y+1;
-                    break;
-                default:
-                    break;
-            }
-
-            if (y> matrix[0].Length-1 || x > matrix.Length-1 || x < 0 || y < 0) return false;
-
-            //if (IsExit(x, y)) return true;
-
-            if (matrix[y][x] == " ")
-            {
-                //matrix[y][x] = ".";
-
-                if (Walk(direction.east, x, y))
+                if (lastPos == null)
                 {
-                    trail[y][x] = "*";
-                } 
-                if (Walk(direction.south, x, y))
+                    lastPos = item;
+                } else
                 {
-                    trail[y][x] = "*";
-                } 
-                if (Walk(direction.west, x, y))
-                {
-                    trail[y][x] = "*";
-                } 
-                if (Walk(direction.north, x, y))
-                {
-                    trail[y][x] = "*";
+                    if (item.x < lastPos.x) directions += "W";
+                    if (item.x > lastPos.x) directions += "E";
+                    if (item.y < lastPos.y) directions += "N";
+                    if (item.y > lastPos.y) directions += "S";
                 }
-                return true;// IsExit(x,y);
+                lastPos = item;
             }
-            else
-            {
-                return false;
-            }
-
+            Console.WriteLine("Directions:");
+            Console.WriteLine(directions);
         }
 
         static void ConvertToMatrix()
@@ -177,9 +211,24 @@ namespace MazeSolver
                 }
             }
 
-            yMax = matrix[0].Length-1;
-            xMax = matrix.Length-1;
+            yMax = matrix[0].Length - 1;
+            xMax = matrix.Length - 1;
 
         }
+        static bool DetectExit(int x, int y)
+        {
+            return
+                (matrix[y][x] == " " &&
+                (x == xMax || y == yMax || x == xMin || y == yMin)) &&
+                (x != startX && y != startY);
+        }
+
+    }
+
+    enum direction { east, west, north, south }
+    public class pos
+    {
+        public int x { get; set; }
+        public int y { get; set; }
     }
 }
