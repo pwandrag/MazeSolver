@@ -25,12 +25,11 @@ namespace MazeSolver
 ######## #### #### #####
 ######## #### #### #####
 ####          #### #####
-#### #############     #
+####@#############     #
 ###################### #
 ###################### #";
 
         static string[][] matrix;
-        static string[][] trail;
 
         static int startX = 0;
         static int startY = 0;
@@ -46,12 +45,18 @@ namespace MazeSolver
             ConvertToMatrix();
             DetectStart();
 
-            var trail = Seek(direction.east, startX, startY);
+            var trail = Seek(direction.east, startX, startY, target.exit);
             trail.Add(new pos { x = startX, y = startY });
+
+            var trail2 = Seek(direction.east, startX, startY, target.cherry);
+            trail2.Add(new pos { x = startX, y = startY });
 
             PrintMaze();
             PrintTrail(trail);
             PrintDirections(trail);
+
+            PrintTrail(trail2);
+            PrintDirections(trail2);
 
             Console.ReadKey();
         }
@@ -73,8 +78,9 @@ namespace MazeSolver
         /// <param name="dir">Direction last search was from</param>
         /// <param name="x">last search pos x</param>
         /// <param name="y">last search pos y</param>
+        /// <param name="target">what to search for</param>
         /// <returns>list of positions from exit</returns>
-        static List<pos> Seek(direction dir, int x, int y)
+        static List<pos> Seek(direction dir, int x, int y, target target)
         {
             if (stop) return null;
 
@@ -93,11 +99,11 @@ namespace MazeSolver
                     break;
                 case direction.north:
                     y = y - 1;
-                    directions = new direction[] { direction.west, direction.north, direction.east };
+                    directions = new direction[] { direction.north, direction.west, direction.east };
                     break;
                 case direction.south:
                     y = y + 1;
-                    directions = new direction[] { direction.west, direction.east, direction.south };
+                    directions = new direction[] { direction.south, direction.east, direction.west };
                     break;
                 default:
                     directions = new direction[] { };
@@ -107,15 +113,26 @@ namespace MazeSolver
             //prevent out of bounds
             if (y > matrix[0].Length - 1 || x > matrix.Length - 1 || x < 0 || y < 0) return null;
 
-            //detect exit
-            if (DetectExit(x, y)) return new List<pos>();
+            //detect target
+            switch (target)
+            {
+                case target.exit:
+                    if (DetectExit(x, y)) return new List<pos>();
+                    break;
+                case target.cherry:
+                    if (DetectCherry(x, y)) return new List<pos>();
+                    break;
+                default:
+                    if (DetectExit(x, y)) return new List<pos>();
+                    break;
+            }
 
             //continue walking
             if (matrix[y][x] == " ")
             {
                 foreach (var item in directions.ToList())
                 {
-                    var t = Seek(item, x, y);
+                    var t = Seek(item, x, y, target);
                     if (t != null)
                     {
                         t.Add(new pos() { x = x, y = y });
@@ -142,16 +159,15 @@ namespace MazeSolver
 
         static void PrintTrail(List<pos> track)
         {
-            foreach (var item in track)
+            for (int i = 0; i < matrix.Length; i++)
             {
-                trail[item.y][item.x] = "*";
-            }
-
-            for (int i = 0; i < trail.Length; i++)
-            {
-                for (int j = 0; j < trail[i].Length; j++)
+                for (int j = 0; j < matrix[0].Length; j++)
                 {
-                    Console.Write(trail[i][j] ?? " ");
+                    if (track.Where(w => w.x == j && w.y == i).Any())
+                        Console.Write("*");
+                    else
+                        Console.Write(" ");
+
                 }
                 Console.WriteLine();
             }
@@ -167,7 +183,8 @@ namespace MazeSolver
                 if (lastPos == null)
                 {
                     lastPos = item;
-                } else
+                }
+                else
                 {
                     if (item.x < lastPos.x) directions += "W";
                     if (item.x > lastPos.x) directions += "E";
@@ -184,11 +201,9 @@ namespace MazeSolver
         {
             var lines = maze.Split("\r\n");
             matrix = new string[lines.Length][];
-            trail = new string[lines.Length][];
             for (int i = 0; i < lines.Length; i++)
             {
                 matrix[i] = lines[i].ToCharArray().ToList().Select(s => s.ToString()).ToArray();
-                trail[i] = new string[lines[i].Length];
             }
         }
 
@@ -223,9 +238,15 @@ namespace MazeSolver
                 (x != startX && y != startY);
         }
 
+        static bool DetectCherry(int x, int y)
+        {
+            return (matrix[y][x] == "@");
+        }
+
     }
 
     enum direction { east, west, north, south }
+    enum target { exit, cherry }
     public class pos
     {
         public int x { get; set; }
